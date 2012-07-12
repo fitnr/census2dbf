@@ -13,13 +13,26 @@ import csv
 import re
 
 help_message = '''
-Convert CSV to DBF.
+Convert CSV to DBF. Requires python dbf library: http://pypi.python.org/pypi/dbf/
 '''
 
 
 class Usage(Exception):
     def __init__(self, msg):
         self.msg = msg
+
+
+def detect_census(handle):
+    reader = csv.reader(handle)
+    for i in range(10):
+        row = next(reader)
+
+    # Reset handle to start.
+    handle.seek(0)
+    if re.match(r'\d{7}US\d{2}', row[0]) is not None:
+        return True  # We found some census data!
+    else:
+        return False
 
 
 def parse_header(header):
@@ -35,7 +48,7 @@ def parse_header(header):
 
 def parse_field_lengths(handle):
     reader = csv.reader(handle)
-    lengths = reader.next()
+    lengths = next(reader)
     lengths = [len(x) for x in lengths]
     for row in reader:
         e = enumerate(row)
@@ -51,9 +64,14 @@ def main(argv=None):
     parser.add_argument('output', type=argparse.FileType('wb', 0), help='output dbf')
 
     args = parser.parse_args()
+
     # Pull the first row for processing into field names. Pull the second row for comparing int and float.
-    header = args.input.next()
-    headers = parse_header(header)
+    if detect_census(args.input):
+        # do something special with the headers
+        pass
+    else:
+        header = args.input.next()
+        headers = parse_header(header)
 
     quote_minimal_reader = csv.reader(args.input, quoting=csv.QUOTE_MINIMAL)
     quote_minimal_rows = quote_minimal_reader.next()
