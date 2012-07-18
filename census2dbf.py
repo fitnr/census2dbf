@@ -2,7 +2,6 @@
 # encoding: utf-8
 """
 csv2dbf.py
-
 Created by Neil Freeman on 2012-06-10.
 """
 
@@ -12,9 +11,7 @@ import dbf
 import csv
 import re
 
-help_message = '''
-Convert CSV to DBF. Requires python dbf library: http://pypi.python.org/pypi/dbf/
-'''
+help_message = '''Convert CSV to DBF. Requires python dbf library: http://pypi.python.org/pypi/dbf/'''
 
 
 class Usage(Exception):
@@ -36,14 +33,11 @@ def detect_census(handle):
 
 
 def parse_header(header):
-    header = header.strip()
-    fields = header.split(',')
-    illegal = re.compile(r'[^\w]')
-    # Clip each field to 11 characters.
-    fields = [f[:11] for f in fields]
+    fields = header.strip().split(',')
+    fields = [f[:11] for f in fields]  # Clip each field to 11 characters.
     # Replace illegal characters in fields with underscore.
-    fields = [illegal.sub('_', x) for x in fields]
-    return fields
+    illegal = re.compile(r'[^\w]')
+    return [illegal.sub('_', x) for x in fields]
 
 
 def parse_field_lengths(handle):
@@ -64,37 +58,28 @@ def main(argv=None):
     parser.add_argument('output', type=argparse.FileType('wb', 0), help='output dbf')
 
     args = parser.parse_args()
+    input_handle = args.input
+    header = input_handle.next()
+    headers = parse_header(header)
 
-    # Pull the first row for processing into field names. Pull the second row for comparing int and float.
-    if detect_census(args.input):
-        # do something special with the headers
-        pass
-    else:
-        header = args.input.next()
-        headers = parse_header(header)
-
-    quote_minimal_reader = csv.reader(args.input, quoting=csv.QUOTE_MINIMAL)
+    quote_minimal_reader = csv.reader(input_handle, quoting=csv.QUOTE_MINIMAL)
     quote_minimal_rows = quote_minimal_reader.next()
     # Reset to the first row to read it with csv module.
-    args.input.seek(0)
-    args.input.next()
+    input_handle.seek(0)
+    input_handle.next()
     try:
-        quote_nonnumeric_reader = csv.reader(args.input, quoting=csv.QUOTE_NONNUMERIC)
+        quote_nonnumeric_reader = csv.reader(input_handle, quoting=csv.QUOTE_NONNUMERIC)
         # stringreader will that a bunch of ints are float, but is correct about strings.
         quote_nonnumeric_rows = quote_nonnumeric_reader.next()
     except ValueError:
-        sys.exit("Could not process document.\nPlease make sure that all strings fields are enclosed with double quotes (\"example\").")
+        sys.exit("Could not process document.\nPlease make sure that fields are properly escaped.")
 
     # Calculate field lengths
-    field_lengths = parse_field_lengths(args.input)
+    field_lengths = parse_field_lengths(input_handle)
 
     two_rows = zip(quote_nonnumeric_rows, quote_minimal_rows)
     field_types = []
-    """
-     dbf field types are described here: http://www.clicketyclick.dk/databases/xbase/format/data_types.html
-     this converter will only concern itself with the below three. Sorry DATETIME.
-     C[haracter] aka Str, N[umber] aka Int, F[loat]
-    """
+
     decimal = re.compile(r'\.')
 
     for x in two_rows:
@@ -109,10 +94,10 @@ def main(argv=None):
 
     #print dbf_fields
 
-    args.input.seek(0)
-    args.input.next()
+    input_handle.seek(0)
+    input_handle.next()
 
-    reader = csv.reader(args.input, quoting=csv.QUOTE_MINIMAL)
+    reader = csv.reader(input_handle, quoting=csv.QUOTE_MINIMAL)
     records = []
     for row in reader:
         records.append(row)
