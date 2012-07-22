@@ -11,3 +11,5 @@ factfinder-download/ACS_10_1YR_B25060_with_ann.csv
 factfinder-download/ACS_10_1YR_B25060.txt
 factfinder-download/DEC_10_SF1_QTH1_with_ann.csv
 factfinder-download/DEC_10_SF1_QTH1.txt
+output.dbf
+tst.dbf
