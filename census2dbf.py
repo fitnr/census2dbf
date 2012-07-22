@@ -4,24 +4,24 @@
 csv2dbf.py
 Created by Neil Freeman on 2012-06-10.
 """
-
-import os
 import sys
 import argparse
-import dbf
+from dbfpy import dbf as dbfpy
+from dbfpy import dbfnew
 import csv
 import re
+import dbfscript
 
 help_message = '''Convert CSV to DBF. Requires python dbf library: http://pypi.python.org/pypi/dbf/'''
 
-
+"""
 def local_from_csv(csvfile='', reader=False, to_disk=False, filename=None,
     field_names=None, extra_fields=None, dbf_type='db3', memo_size=64, min_field_size=1):
 
     'Adapted from the dbf module to allow for using an open csv reader'
-    """creates a Character table from a csv file to_disk will create a table with the same name
+    'creates a Character table from a csv file to_disk will create a table with the same name
     filename will be used if provided field_names default to f0, f1, f2, etc, unless specified (list)
-    extra_fields can be used to add additional fields -- should be normal field specifiers (list)"""
+    extra_fields can be used to add additional fields -- should be normal field specifiers (list)'
 
     if not reader:
         reader = csv.reader(open(csvfile))
@@ -68,6 +68,8 @@ def local_from_csv(csvfile='', reader=False, to_disk=False, filename=None,
             csvtable.append(record.scatter_fields())
         return csvtable
     return mtable
+
+"""
 
 
 class Usage(Exception):
@@ -136,20 +138,34 @@ class parse_csv(object):
                 pass
         return False
 
-    def spec_fields(self, header, first_num_field):
+    def spec_fields(self, header, first_num_field, lengths):
         if self.fields:
             return self.fields
         fieldspecs = []
-        # fieldspecs are going to look like: ["stringfield C", "numfield N"]
-        for field in header:
-            #fieldspecs.append(field)
+        # fieldspecs are going to look like: [('stringfield', 'C', x), ('numfield'. 'N', y)]
+        fields = zip(header, lengths)
+        for fieldname, length in fields:
+
             if (first_num_field > 0):
-                fieldspecs.append(field + ' C')
+                x = tuple([fieldname, 'C', length])
                 first_num_field -= 1
             else:
-                fieldspecs.append(field + ' N')
+                x = tuple([fieldname, 'N', length])
 
+            fieldspecs.append(x)
         return fieldspecs
+
+    def parse_field_lengths(self, num_header_rows):
+        self.handle.seek(0)
+        for i in range(num_header_rows):
+            self.reader.next()
+        lengths = self.reader.next()
+        lengths = [len(x) for x in lengths]
+        for row in self.reader:
+            e = enumerate(row)
+            for x, y in e:
+                lengths[x] = max(lengths[x], len(y))
+        return lengths
 
     def point_at_data(self, num_header_rows):
         self.handle.seek(0)
@@ -174,22 +190,46 @@ def main(argv=None):
 
     data_dictionary, header = csv_parser.parse_header(num_header_rows)
 
-    # Write the field specs.
+    lengths = csv_parser.parse_field_lengths(num_header_rows)
+
     first_num_field = csv_parser.find_first_num_field(num_header_rows)
 
-    fieldspecs = csv_parser.spec_fields(header, first_num_field)
-    print 'fieldspecs :\n' + str(fieldspecs)
+    # Write the field specs.
+    fieldspecs = csv_parser.spec_fields(header, first_num_field, lengths)
+
     #place pointer in the right place
     csv_parser.point_at_data(num_header_rows)
 
     #local_from_csv(reader=csv_parser.reader, field_names=fieldspecs, filename=args.output, dbf_type='dbf')
     #mtable = local_from_csv(reader=csv_parser.reader, field_names=fieldspecs, dbf_type='dbf')
     #mtable = local_from_csv(reader=csv_parser.reader, dbf_type='dbf')
+    '''
     fields = ['GEOid', 'GEOid2','GEOdisplaylabel','S01','S01','S02','S02','S03','S03','S04','S04','S05','S05','S06','S06','S07','S07','S08','S08','S09','S09','S10','S10','S11','S11','S12','S12','S13','S13','S14','S14','S15','S15','S16','S16','S17','S17','S18','S18','S19','S19','S20','S20','S21','S21','S22','S22','S23','S23','S24','S24','S25','S25','S26','S26','S27','S27','S28','S28','S29','S29','S30','S30','S31','S31','S32','S32','S33','S33','S34','S34','S35','S35','S36','S36','S37','S37','S38','S38','S39','S39','S40','S40','S41','S41','S42','S42','S43','S43','S44','S44','S45','S45','S46','S46','S47','S47','S48','S48','S49','S49','S50','S50','S51','S51'
     ]
+    '''
+    #mtable = dbf.from_csv(csvfile='test2.csv', filename=args.output, field_names=fields)
+    dbf = dbfnew.dbf_new()
 
-    mtable = dbf.from_csv(csvfile='test2.csv', filename=args.output, field_names=fields)
-    print mtable
+    for field in fieldspecs:
+        dbf.add_field(*field)
+    try:
+        dbf.write('output.dbf')
+    except:
+        print "couldn't write the dbf. that's a problem"
+
+    dbft = dbfpy.Dbf('output.dbf')
+    #dbft.openFile('output.dbf', readOnly=0)
+    #dbft.reportOn()
+
+    for row in csv_parser.reader:
+        rec = dbfpy.DbfRecord(dbft)
+        i = 0
+        for fieldname, x, y in fieldspecs:
+            rec[fieldname] = row[i]
+            i += 1
+        rec.store()
+
+    dbft.close()
 
     if args.output_dd:
         output = args.output[0:-4] + "_data-dictionary.txt"
