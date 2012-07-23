@@ -93,111 +93,112 @@ class csv_parser(object):
     # input (optional): field types, date format
     # output: fieldnames, lengths, types
 
-    def __init__(self, **kwargs):
-        self.handle = kwargs.get('handle')
-        self.fields = kwargs.get('fields', None)
+    def __init__(self, handle):
+        self.handle = handle
         self.reader = csv.reader(self.handle)
 
-    def parse_header(self, num_header_rows):
+    def parse_header(self):
         'parses a row and returns fieldnames'
-        if num_header_rows == 0:
-            return False
+        full_header, on_header, i = [], True, 0
+
         self.handle.seek(0)
-        full_header = []
-        for k in range(num_header_rows):
+
+        # Handle the first row as the header
+        row = next(self.reader)
+        fieldnames = [f[:11] for f in row]  # Clip each field to 10 characters.
+        if fieldnames[0] == '':
+            fieldnames[0] = 'geoid'
+        if fieldnames[1] == '':
+            fieldnames[1] = 'geoid2'
+        if fieldnames[2] == '':
+            fieldnames[2] = 'geoname'
+        # Replace illegal characters in fieldnames with underscore.
+        illegal = re.compile(r'[^\w]')
+        fieldnames = [illegal.sub('_', x) for x in fieldnames]
+
+        full_header.append(fieldnames)
+
+        while on_header is True:
             row = next(self.reader)
+            i += 1
             # pull the fieldnames from the first row of headers
-            if (0 == k):
-                fieldnames = [f[:11] for f in row]  # Clip each field to 10 characters.
-                if fieldnames[0] == '':
-                    fieldnames[0] = 'geoid'
-                if fieldnames[1] == '':
-                    fieldnames[1] = 'geoid2'
-                if fieldnames[2] == '':
-                    fieldnames[2] = 'geoname'
-                # Replace illegal characters in fieldnames with underscore.
-                illegal = re.compile(r'[^\w]')
-                fieldnames = [illegal.sub('_', x) for x in fieldnames]
-                row = fieldnames
-
-            full_header.append(row)
-        full_header = zip(*full_header)
-        return full_header, fieldnames
-
-    def find_first_data_row(self):
-        self.handle.seek(0)
-        for i in range(10):
-            row = self.reader.next()
             if re.match(r'\d{7}US\d{2}', row[0]):
-                self.handle.seek(0)
-                # We found some census data, return the row number
-                return i
-        return False
-
-    def find_first_num_field(self, num_header_rows):
-        self.handle.seek(0)
-        for i in range(num_header_rows):
-            self.reader.next()
-        row = self.reader.next()
-        # Census files always start with two GEOIDs. Right?
-        for j in range(2, len(row)):
-            field = row[j]
-            try:
-                int(field)
-                return j
-            except ValueError:
-                pass
-        return False
-
-    def spec_fields(self, header, first_num_field, lengths):
-        if self.fields:
-            return self.fields
-        fieldspecs = []
-        # fieldspecs are going to look like: [('stringfield', 'C', x), ('numfield'. 'N', y)]
-        for length in lengths:
-
-            if (first_num_field > 0):
-                x = tuple(['C', length, 0])
-                first_num_field -= 1
+                types = [self.get_field_type(f) for f in row]
+                lengths = [len(x) for x in row]
+                on_header = False
             else:
-                x = tuple(['N', length, 2])
+                full_header.append(row)
 
-            fieldspecs.append(x)
-        return fieldspecs
+        full_header = zip(*full_header)
+        deci = [''] * len(types)
 
-    def parse_field_lengths(self, num_header_rows):
-        self.handle.seek(0)
-        for i in range(num_header_rows):
-            self.reader.next()
-        lengths = self.reader.next()
-        lengths = [len(x) for x in lengths]
+        # Pointer doesn't move
+        header, field_specs = self.spec_fields(fieldnames, types, lengths, deci)
+
+        return field_specs, i, header, full_header
+
+    def get_field_type(self, value):
+        'Value should be a string read from the csv.'
+        'Will return value in the (possibly) correct type.'
+
+        try:
+            if float(value) == int(value):
+                return int
+            else:
+                return float
+        except ValueError:
+            pass
+
+        # Return string as an error
+        return str
+
+    def spec_fields(self, names, types, lengths, decis):
+        # fieldspecs are going to look like: [(C', x), ('N', y, 0)]
+        field_specs = zip(names, types, lengths, decis)
+        new_field_specs, header = [], []
+
+        for name, typ, length, deci in field_specs:
+            if (name == 'geoid' or name == 'geoid2' or typ == str):
+                typ, deci = 'C', 0
+            elif typ == int:
+                typ, deci = 'N', 0
+            elif typ == float:
+                typ, deci = 'N', 2
+
+            new_field_specs.append(tuple([typ, length, deci]))
+            header.append(name)
+
+        return header, new_field_specs
+
+    def get_field_lengths(self, field_specs):
+        types, lengths, decis = zip(*field_specs)
+        lengths = list(lengths)
         for row in self.reader:
             e = enumerate(row)
-            for x, y in e:
-                lengths[x] = max(lengths[x], len(y))
-        return lengths
+            for k, field in e:
+                lengths[k] = max(lengths[k], len(field))
 
-    def point_at_data(self, num_header_rows):
+        return zip(list(types), lengths, list(decis))
+
+    def point_at_data(self):
         self.handle.seek(0)
-        for i in range(num_header_rows):
+        for i in range(self.num_headers):
             self.reader.next()
 
     def get_records(self):
         #place pointer in the right place
-        self.point_at_data(self.num_header_rows)
+        self.point_at_data()
         return [row for row in self.reader]
 
     def parse(self):
-        num_header_rows = self.find_first_data_row()
+        field_specs, self.num_headers, header, self.datadict = self.parse_header()
+        # Pointer is on first data row.
+        field_specs = self.get_field_lengths(field_specs)
+        # Pointer is at end.
+        # This resets pointer back to where data starts
+        self.records = self.get_records()
 
-        self.data_dictionary, self.header = self.parse_header(num_header_rows)
-
-        lengths = self.parse_field_lengths(num_header_rows)
-
-        first_num_field = self.find_first_num_field(num_header_rows)
-
-        # Write the field specs.
-        self.fieldspecs = self.spec_fields(self.header, first_num_field, lengths)
+        return header, field_specs, self.records
 
     def write_dd(self, input_file, output_file):
         now = datetime.datetime.now()
@@ -207,7 +208,7 @@ class csv_parser(object):
             msg = "Data Dictionary\nAutomatically extracted from the header of {0}\n{1}\n".format(input_file, now.strftime("%Y-%m-%d %H:%M"))
             data_dict_handle.write(msg)
             out_list = []
-            for row in self.data_dictionary:
+            for row in self.datadict:
                 out_str = ""
                 for field in row:
                     out_str = out_str + field + "\t"
@@ -238,14 +239,14 @@ def main(argv=None):
         output_file = open(name, 'w')
 
     # Parse the csv.
-    parse = csv_parser(**{'handle': args.input})
-    records = parse.get_records()
+    parser = csv_parser(handle=args.input)
+    header, fieldspecs, records = parser.parse()
 
     # Write to dbf.
-    dbfwriter(output_file, parse.header, parse.fieldspecs, records)
+    dbfwriter(output_file, header, fieldspecs, records)
 
     if args.dd:
-        parser.write_dd(parse.data_dictionary, args.input.name, output_file)
+        parser.write_dd(args.input.name, output_file)
 
 
 if __name__ == "__main__":
