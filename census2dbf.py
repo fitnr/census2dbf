@@ -15,7 +15,7 @@ import struct
 import datetime
 import itertools
 
-help_message = '''Convert Census CSVs to DBF. Requires python dbf library: http://pypi.python.org/pypi/dbf/'''
+help_message = '''Convert US Census CSVs to DBF.'''
 
 
 class Usage(Exception):
