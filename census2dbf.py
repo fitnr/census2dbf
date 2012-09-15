@@ -114,7 +114,7 @@ class csv_parser(object):
             fieldnames[2] = 'geoname'
         # Replace illegal characters in fieldnames with underscore.
         illegal = re.compile(r'[^\w]')
-        fieldnames = [illegal.sub('_', x) for x in fieldnames]
+        fieldnames = [illegal.sub('', x).lower() for x in fieldnames]
 
         full_header.append(fieldnames)
 
@@ -211,7 +211,8 @@ class csv_parser(object):
             for row in self.datadict:
                 out_str = ""
                 for field in row:
-                    out_str = out_str + field + "\t"
+                    out_str += field + "\t"
+
                 out_list.append(out_str + "\n")
             data_dict_handle.writelines(out_list)
 
