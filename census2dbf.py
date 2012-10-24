@@ -120,9 +120,10 @@ class csv_parser(object):
 
         while on_header is True:
             row = next(self.reader)
+
             i += 1
             # pull the fieldnames from the first row of headers
-            if re.match(r'\d{7}US\d{2}', row[0]):
+            if re.match(r'\w{7}US\d+', row[0]):
                 types = [self.get_field_type(f) for f in row]
                 lengths = [len(x) for x in row]
                 on_header = False
