@@ -18,6 +18,7 @@
 import csv
 import re
 import datetime
+import string
 from collections import OrderedDict
 
 NULLS = ['(X)', 'N']
@@ -35,7 +36,36 @@ def get_header(reader):
     return fieldnames
 
 
-def get_fieldnames(row):
+def suffix(name, strng):
+    return name[:-1] + strng
+
+
+def dedupe(names):
+    '''Add suffixes to duplicate fieldnames'''
+    setnames = set(names)
+
+    if len(setnames) < len(names):
+        indices = dict((n, []) for n in setnames)
+        suffixes = list(string.ascii_lowercase + string.digits)
+
+        for i, name in enumerate(names):
+            indices[name].append(i)
+
+        for name, indexlist in indices.items():
+            cnt = len(indexlist)
+            if cnt > 1:
+                newnames = [suffix(name, s) for s in suffixes if suffix(name, s) not in names]
+
+                if len(newnames) < cnt:
+                    raise RuntimeError("These field names are hard")
+
+                for index, new in zip(indexlist, newnames):
+                    names[index] = new
+
+    return names
+
+
+def rewritefieldnames(row):
     '''Extract the fieldnames from a Census CSV row'''
     if row[0] == '':
         row[0] = 'geoid'
@@ -48,8 +78,10 @@ def get_fieldnames(row):
 
     # Replace illegal characters in fieldnames with underscore.
     # Clip each field to 10 characters.
-    illegal = re.compile(r'[^\w]')
-    return [illegal.sub('', x).lower()[:11] for x in row]
+    illegal = re.compile(r'([^\w]|_)')
+    fieldnames = [illegal.sub('', x).lower()[:11] for x in row]
+
+    return dedupe(fieldnames)
 
 
 def fieldtype(value, nulls=None):
@@ -155,7 +187,7 @@ def parse(handle, cols=None):
 
     fields, numrecords = dbfspecs(header[0], reader, include_cols=cols)
 
-    fields = dict(zip(get_fieldnames(fields.keys()), fields.values()))
+    fields = dict(zip(rewritefieldnames(fields.keys()), fields.values()))
 
     # Reset to start of data again.
     handle.seek(0)
