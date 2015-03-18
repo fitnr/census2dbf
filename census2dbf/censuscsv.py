@@ -18,15 +18,16 @@
 import csv
 import re
 import datetime
+from collections import OrderedDict
 
+NULLS = ['(X)', 'N']
 
 def get_header(reader):
     '''extracts the header'''
     fieldnames = []
     row = next(reader)
 
-    patt = re.compile(r'\w{7}US\d+')
-
+    patt = re.compile(r'\w{7}US\d*')
     while not patt.match(row[0]):
         fieldnames.append(row)
         row = next(reader)
@@ -36,80 +37,83 @@ def get_header(reader):
 
 def get_fieldnames(row):
     '''Extract the fieldnames from a Census CSV row'''
-    fieldnames = [f[:11] for f in row]  # Clip each field to 10 characters.
+    if row[0] == '':
+        row[0] = 'geoid'
 
-    if fieldnames[0] == '':
-        fieldnames[0] = 'geoid'
+    if len(row) > 1 and row[1] == '':
+        row[1] = 'geoid2'
 
-    if fieldnames[1] == '':
-        fieldnames[1] = 'geoid2'
-
-    if fieldnames[2] == '':
-        fieldnames[2] = 'geoname'
+    if len(row) > 2 and row[2] == '':
+        row[2] = 'geoname'
 
     # Replace illegal characters in fieldnames with underscore.
+    # Clip each field to 10 characters.
     illegal = re.compile(r'[^\w]')
-    fieldnames = [illegal.sub('', x).lower() for x in fieldnames]
-
-    return fieldnames
+    return [illegal.sub('', x).lower()[:11] for x in row]
 
 
-def fieldtype(value):
+def fieldtype(value, nulls=None):
     '''Value should be a string read from the csv.
     Will return value in the (possibly) correct type.'''
+    nulls = nulls or []
+
+    if value in nulls:
+        return None
 
     try:
-        if float(value) == int(value):
+        floated = float(value)
+        if floated == int(floated):
             return int
         else:
             return float
     except ValueError:
-        pass
-
-    # Return string as an error
-    return str
+        return str
 
 
-def spec_fields(names, types, lengths):
-    '''Write the spec for DBF fields. Fieldspecs are going to look like: [('C', x), ('N', y, 0)]'''
+def spec(name, types=None, length=None):
+    '''Return DBF spec for a fieldname, a set of types and a length'''
 
-    specs = []
+    if types == None or length == None:
+        return False
 
-    for name, (fieldtypes, fieldlengths) in zip(names, zip(types, lengths)):
-        deci = ''
+    if name == 'geoid' or name == 'geoid2' or str in types:
+        typ, deci = 'C', 0
 
-        length = max(fieldlengths)
-        fieldtypes = set(fieldtypes)
+    elif float in types:
+        typ, deci = 'N', 2
 
-        if name == 'geoid' or name == 'geoid2' or str in fieldtypes:
-            typ, deci = 'C', 0
+    elif int in types:
+        typ, deci = 'N', 0
 
-        elif float in fieldtypes:
-            typ, deci = 'N', 2
+    else:
+        typ, deci = 'C', 0
 
-        elif int in fieldtypes:
-            typ, deci = 'N', 0
-
-
-        specs.append(tuple([typ, length, deci]))
-
-    return specs
+    return typ, length, deci
 
 
-def dbfspecs(fieldnames, reader):
+def dbfspecs(fieldnames, reader, include_cols=None):
     '''Inspect fields, determining length and type. Use latter to write DBF specs'''
-    lengths, types = [], []
+    j = 0
+    nulls = set(NULLS)
 
-    for row in reader:
-        rowtypes, rowlengths = zip(*((fieldtype(cell), len(cell)) for cell in row))
+    include_cols = include_cols or fieldnames
+    include_cols = [i.lower() for i in include_cols]
+    compressor = [n.lower() in include_cols for n in fieldnames]
 
-        types.append(rowtypes)
-        lengths.append(rowlengths)
+    cols = [{} for _ in fieldnames]
 
-    return spec_fields(fieldnames, types, lengths)
+    for j, row in enumerate(reader):
+        for i, cell in enumerate(row):
+            if compressor[i]:
+                cols[i]['types'] = cols[i].get('types', set()).union((fieldtype(cell, nulls), ))
+                cols[i]['length'] = max(cols[i].get('length', 0), len(cell))
+
+    fields = [(name, spec(name, **col)) for name, col in zip(include_cols, cols)]
+    # numrecords is 1-indexed
+    return OrderedDict(fields), j + 1
 
 
-def write_dd(input_file, output_file):
+def write_dd(input_file, output_file, include_cols=None):
     '''Write a data dictionary'''
     now = datetime.datetime.now()
 
@@ -118,38 +122,43 @@ def write_dd(input_file, output_file):
 
     datadict = zip(*headers)
 
+    if include_cols:
+        datadict = [(x, y) for x, y in datadict if x in include_cols]
+
     with open(output_file, 'w+') as g:
         msg = "Data Dictionary\nAutomatically extracted from the header of {0}\n{1}\n".format(
             input_file, now.strftime("%Y-%m-%d %H:%M"))
 
         g.write(msg)
-
-        fieldnames = ['field', 'description'] + [''] * (len(datadict[0]) - 2)
-        writer = csv.DictWriter(g, fieldnames=fieldnames)
-
-        writer.writerows(datadict)
+        csv.writer(g, delimiter='\t').writerows(datadict)
 
 
-def parse(input_file):
+def reset(reader, n):
+    '''Reset a reader to the nth row.'''
+    for _ in range(n):
+        next(reader)
+
+
+def parse(handle, cols=None):
     """open up the csv, decide what kind of format it is, and get the fields and data ready.
     input: file name
     output: fieldnames, lengths, types, data_dictionary"""
+    reader = csv.reader(handle)
 
-    with open(input_file, 'r') as handle:
-        reader = csv.reader(handle)
+    # interested in the last row before things it turns into data
+    # Tell is the position of the first data row
+    header = get_header(reader)
 
-        # interested in the last row before things it turns into data
-        header = get_header(reader)
+    # Pointer is and end of first data row. Reset to start of data.
+    handle.seek(0)
+    reset(reader, len(header))
 
-        fieldnames = get_fieldnames(header[-1])
+    fields, numrecords = dbfspecs(header[0], reader, include_cols=cols)
 
-        # Pointer is on first data row.
-        specs = dbfspecs(fieldnames, reader)
+    fields = dict(zip(get_fieldnames(fields.keys()), fields.values()))
 
-        # Pointer is at end.
-        # reset pointer back to where data starts
-        handle.seek(0)
-        for _ in range(len(header)):
-            reader.next()
+    # Reset to start of data again.
+    handle.seek(0)
+    reset(reader, len(header))
 
-        return fieldnames, specs, reader
+    return fields, numrecords, reader

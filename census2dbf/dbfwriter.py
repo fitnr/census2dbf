@@ -8,10 +8,52 @@
 import datetime
 import struct
 
-def dbfwriter(f, fieldnames, fieldspecs, records):
+def _packheader(fieldspecs, numrec=None, records=None):
+    '''Set up header info'''
+    ver = 3
+    now = datetime.datetime.now()
+    year, mon, day = now.year - 1900, now.month, now.day
+
+    if numrec is None:
+        numrec = len(records)
+
+    lenheader = len(fieldspecs) * 32 + 33
+    lenrecord = sum(field[1] for field in fieldspecs if field) + 1
+    return struct.pack('<BBBBLHH20x', ver, year, mon, day, numrec, lenheader, lenrecord)
+
+def _packspec(name, typ, size, deci):
+    name = name.ljust(11, '\x00')
+    return struct.pack('<11sc4xBB14x', name, typ, size, deci)
+
+def _setvalue(value, typ, size, nulls=None):
+    '''Set a field's value'''
+
+    if nulls and value in nulls:
+        value = ''
+
+    if typ == "N":
+        value = str(value).rjust(size, ' ')
+
+    elif typ == 'D':
+        try:
+            value = value.strftime('%Y%m%d')
+        except AttributeError:
+            value = ''
+
+    elif typ == 'L':
+        value = str(value)[0].upper()
+
+    else:
+        value = str(value)[:size].ljust(size, ' ')
+
+    return value
+
+def dbfwriter(handle, fields, records, numrec=None, nulls=None):
     """ Return a string suitable for writing directly to a binary dbf file.
 
     File f should be open for writing in a binary mode.
+
+    Fields should be a dictionary with {names: specs}
 
     Fieldnames should be no longer than ten characters and not include \x00.
     Fieldspecs are in the form (type, size, deci) where
@@ -25,42 +67,30 @@ def dbfwriter(f, fieldnames, fieldspecs, records):
         deci is the number of decimal places in the provided decimal object
     Records can be an iterable over the records (sequences of field values).
 
+    If fieldspecs are boolean False, that column is ignored
     """
-    # header info
-    ver = 3
-    now = datetime.datetime.now()
-    year, mon, day = now.year - 1900, now.month, now.day
-    numrec = len(records)
-    numfields = len(fieldspecs)
-    lenheader = numfields * 32 + 33
-    lenrecord = sum(field[1] for field in fieldspecs) + 1
-    hdr = struct.pack('<BBBBLHH20x', ver, year, mon, day, numrec, lenheader, lenrecord)
-    f.write(hdr)
+    fieldspecs = fields.values()
+    handle.write(_packheader(fieldspecs, numrec=numrec, records=records))
 
     # field specs
-    for name, (typ, size, deci) in zip(fieldnames, fieldspecs):
-        name = name.ljust(11, '\x00')
-        fld = struct.pack('<11sc4xBB14x', name, typ, size, deci)
-        f.write(fld)
+    for name, spec in zip(fields.keys(), fieldspecs):
+        if spec:
+            handle.write(_packspec(name, *spec))
 
     # terminator
-    f.write('\r')
+    handle.write('\r')
+
+    nulls = set(nulls) or []
 
     # records
-    for record in records:
-        f.write(' ') # deletion flag
-        for (typ, size, deci), value in zip(fieldspecs, record):
-            if typ == "N":
-                value = str(value).rjust(size, ' ')
-            elif typ == 'D':
-                value = value.strftime('%Y%m%d')
-            elif typ == 'L':
-                value = str(value)[0].upper()
-            else:
-                value = str(value)[:size].ljust(size, ' ')
-            assert len(value) == size
-            f.write(value)
+    for row in records:
+        handle.write(' ') # deletion flag
+        for spec, value in zip(fieldspecs, row):
+            if spec:
+                value = _setvalue(value, spec[0], spec[1], nulls=nulls)
+                assert len(value) == spec[1]
+                handle.write(value)
 
     # End of file
-    f.write('\x1A')
+    handle.write('\x1A')
 
