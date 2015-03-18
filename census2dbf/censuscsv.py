@@ -84,13 +84,17 @@ def rewritefieldnames(row):
     return dedupe(fieldnames)
 
 
-def fieldtype(value, nulls=None):
+def fieldtype(name, value, nulls=None):
     '''Value should be a string read from the csv.
     Will return value in the (possibly) correct type.'''
     nulls = nulls or []
 
     if value in nulls:
         return None
+
+    # Special exception for Census docs
+    if name == 'geoid' or name == 'geoid2':
+        return str
 
     try:
         floated = float(value)
@@ -102,28 +106,31 @@ def fieldtype(value, nulls=None):
         return str
 
 
-def spec(name, types=None, length=None):
-    '''Return DBF spec for a fieldname, a set of types and a length'''
-
-    if types == None or length == None:
-        return False
-
-    if name == 'geoid' or name == 'geoid2' or str in types:
-        typ, deci = 'C', 0
+def picktype(types):
+    '''Pick a type from an iterable of types'''
+    if str in types:
+        return str
 
     elif float in types:
-        typ, deci = 'N', 2
-
-    elif int in types:
-        typ, deci = 'N', 0
-
+        return float
     else:
-        typ, deci = 'C', 0
+        return int
 
-    return typ, length, deci
 
+def fieldspec(types=None, size=None):
+    spec = {}
+
+    if types:
+        spec['type'] = picktype(types)
+        if spec['type'] == float:
+            spec['precision'] = 2
+
+    if size is not None:
+        spec['size'] = size
 
 def dbfspecs(fieldnames, reader, include_cols=None):
+    return spec
+
     '''Inspect fields, determining length and type. Use latter to write DBF specs'''
     j = 0
     nulls = set(NULLS)
@@ -137,10 +144,14 @@ def dbfspecs(fieldnames, reader, include_cols=None):
     for j, row in enumerate(reader):
         for i, cell in enumerate(row):
             if compressor[i]:
-                cols[i]['types'] = cols[i].get('types', set()).union((fieldtype(cell, nulls), ))
-                cols[i]['length'] = max(cols[i].get('length', 0), len(cell))
+                ftype = fieldtype(fieldnames[i], cell, nulls)
 
-    fields = [(name, spec(name, **col)) for name, col in zip(include_cols, cols)]
+                cols[i]['types'] = cols[i].get('types', set()).union((ftype, ))
+                cols[i]['size'] = max(cols[i].get('size', 0), len(cell))
+
+    fields = [(name, fieldspec(**col)) for name, col in zip(fieldnames, cols)]
+    fields.reverse()
+
     # numrecords is 1-indexed
     return OrderedDict(fields), j + 1
 

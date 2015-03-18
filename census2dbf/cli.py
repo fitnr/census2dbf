@@ -35,11 +35,11 @@ def main():
 
     with open(args.input, 'r') as handle:
         # Parse the csv.
-        fields, numrec, reader = censuscsv.parse(handle, cols=include_cols)
+        fields, numrows, reader = censuscsv.parse(handle, cols=include_cols)
 
         # Write to dbf.
         with open(output_file, 'w') as sink:
-            dbfwriter.dbfwriter(sink, fields, records=reader, numrec=numrec, nulls=censuscsv.NULLS)
+            dbfwriter.dbfwriter(sink, fields, records=reader, numrows=numrows, nulls=censuscsv.NULLS)
 
     if args.dd:
         dd_file = base + '-data-dictionary.txt'
