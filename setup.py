@@ -49,6 +49,8 @@ setup(
     install_requires=[
     ],
 
+    use_2to3=True,
+
     entry_points={
         'console_scripts': [
             'census2dbf=census2dbf.cli:main',
