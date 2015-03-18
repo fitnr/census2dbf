@@ -23,6 +23,7 @@ from collections import OrderedDict
 
 NULLS = ['(X)', 'N']
 
+
 def get_header(reader):
     '''extracts the header'''
     fieldnames = []
@@ -40,16 +41,19 @@ def suffix(name, strng):
     return name[:-1] + strng
 
 
-def dedupe(names):
+def dedupe(names, compressor=None):
     '''Add suffixes to duplicate fieldnames'''
     setnames = set(names)
+
+    compressor = compressor or names
 
     if len(setnames) < len(names):
         indices = dict((n, []) for n in setnames)
         suffixes = list(string.ascii_lowercase + string.digits)
 
         for i, name in enumerate(names):
-            indices[name].append(i)
+            if compressor[i]:
+                indices[name].append(i)
 
         for name, indexlist in indices.items():
             cnt = len(indexlist)
@@ -65,7 +69,7 @@ def dedupe(names):
     return names
 
 
-def rewritefieldnames(row):
+def rewritefieldnames(row, compressor=None):
     '''Extract the fieldnames from a Census CSV row'''
     if row[0] == '':
         row[0] = 'geoid'
@@ -81,7 +85,7 @@ def rewritefieldnames(row):
     illegal = re.compile(r'([^\w]|_)')
     fieldnames = [illegal.sub('', x).lower()[:11] for x in row]
 
-    return dedupe(fieldnames)
+    return dedupe(fieldnames, compressor)
 
 
 def fieldtype(name, value, nulls=None):
@@ -122,35 +126,28 @@ def fieldspec(types=None, size=None):
 
     if types:
         spec['type'] = picktype(types)
-        if spec['type'] == float:
-            spec['precision'] = 2
 
     if size is not None:
         spec['size'] = size
 
-def dbfspecs(fieldnames, reader, include_cols=None):
     return spec
 
+
+def dbfspecs(fieldnames, reader, compressor=None):
     '''Inspect fields, determining length and type. Use latter to write DBF specs'''
     j = 0
     nulls = set(NULLS)
-
-    include_cols = include_cols or fieldnames
-    include_cols = [i.lower() for i in include_cols]
-    compressor = [n.lower() in include_cols for n in fieldnames]
-
+    compressor = compressor or fieldnames
     cols = [{} for _ in fieldnames]
 
     for j, row in enumerate(reader):
         for i, cell in enumerate(row):
             if compressor[i]:
                 ftype = fieldtype(fieldnames[i], cell, nulls)
-
                 cols[i]['types'] = cols[i].get('types', set()).union((ftype, ))
                 cols[i]['size'] = max(cols[i].get('size', 0), len(cell))
 
     fields = [(name, fieldspec(**col)) for name, col in zip(fieldnames, cols)]
-    fields.reverse()
 
     # numrecords is 1-indexed
     return OrderedDict(fields), j + 1
@@ -196,9 +193,15 @@ def parse(handle, cols=None):
     handle.seek(0)
     reset(reader, len(header))
 
-    fields, numrecords = dbfspecs(header[0], reader, include_cols=cols)
+    if cols:
+        cols = [i.lower() for i in cols]
+        compressor = [n.lower() in cols for n in header[0]]
+    else:
+        compressor = None
 
-    fields = dict(zip(rewritefieldnames(fields.keys()), fields.values()))
+    fields, numrecords = dbfspecs(header[0], reader, compressor=compressor)
+
+    fields = OrderedDict(zip(rewritefieldnames(fields.keys(), compressor), fields.values()))
 
     # Reset to start of data again.
     handle.seek(0)

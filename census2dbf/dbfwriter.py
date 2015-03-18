@@ -97,7 +97,7 @@ def dbfwriter(handle, fields, records, numrows=None, nulls=None):
     for name, fspec in fields.items():
         if fspec:
             name = name.ljust(11, '\x00')
-            fspec['type'], fspec['deci'] = spec(fspec['type'], fspec.get('precision'))
+            fspec['type'], fspec['deci'] = spec(fspec['type'])
             handle.write(struct.pack('<11sc4xBB14x', name, fspec['type'], fspec['size'], fspec['deci']))
 
     # terminator
