@@ -42,3 +42,5 @@ coverage.xml
 docs/_build/
 
 readme.rst
+tests/data/*-data-dictionary.txt
+tests/data/*.dbf

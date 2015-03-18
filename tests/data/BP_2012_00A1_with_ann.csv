@@ -1,0 +1,23 @@
+GEO.id,GEO.id2,GEO.display-label,NAICS.id,NAICS.display-label,YEAR.id,ESTAB,EMP,PAYQTR1,PAYANN
+Geographic identifier code,Id2,Geographic area name,2012 NAICS code,Meaning of 2012 NAICS code,Year,Number of establishments,Paid employees for pay period including March 12 (number),"First-quarter payroll ($1,000)","Annual payroll ($1,000)"
+0100000US,,United States,00,Total for all sectors,2012,7431808,115938468,1364679729,5414255995
+0100000US,,United States,11,"Agriculture, forestry, fishing and hunting",2012,22046,161077,1332987,5909348
+0100000US,,United States,21,"Mining, quarrying, and oil and gas extraction",2012,28909,727626,16026274,61297296
+0100000US,,United States,22,Utilities,2012,17833,641063,17519571,59062129
+0100000US,,United States,23,Construction,2012,652902,5260942,61164041,275201822
+0100000US,,United States,31-33,Manufacturing,2012,297221,11192043,147982820,598562299
+0100000US,,United States,42,Wholesale trade,2012,420501,5776243,92064638,370089114
+0100000US,,United States,44-45,Retail trade,2012,1063842,14807958,91405395,377038789
+0100000US,,United States,48-49,Transportation and warehousing,2012,214492,4233381,45389988,184933170
+0100000US,,United States,51,Information,2012,135185,3136025,67972776,255302986
+0100000US,,United States,52,Finance and insurance,2012,474510,5979661,163299485,521756571
+0100000US,,United States,53,Real estate and rental and leasing,2012,349776,1940681,21851770,89273379
+0100000US,,United States,54,"Professional, scientific, and technical services",2012,859182,8016181,142151431,594974148
+0100000US,,United States,55,Management of companies and enterprises,2012,52247,3037299,90267171,316002701
+0100000US,,United States,56,Administrative and support and waste management and remediation services,2012,387465,9866296,83034100,350392701
+0100000US,,United States,61,Educational services,2012,95872,3477047,29254790,120457472
+0100000US,,United States,62,Health care and social assistance,2012,833883,18378342,194683583,814682450
+0100000US,,United States,71,"Arts, entertainment, and recreation",2012,125082,2057290,14283772,66011054
+0100000US,,United States,72,Accommodation and food services,2012,662757,11985274,48558158,203564797
+0100000US,,United States,81,Other services (except public administration),2012,730999,5256250,36405447,149586232
+0100000US,,United States,99,Industries not classified,2012,7104,i,31532,157537
