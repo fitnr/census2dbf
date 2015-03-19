@@ -39,7 +39,13 @@ def main():
 
         # Write to dbf.
         with open(output_file, 'w') as sink:
-            dbfwriter.dbfwriter(sink, fields, records=reader, numrows=numrows, nulls=censuscsv.NULLS)
+            kwargs = {
+                'numrows': numrows,
+                'nulls': censuscsv.NULLS,
+                'strip': r'\(r\d+\)'
+            }
+
+            dbfwriter.dbfwriter(sink, fields, reader, **kwargs)
 
     if args.dd:
         dd_file = base + '-data-dictionary.txt'

@@ -5,6 +5,7 @@
 # All Content deposited shall to be governed by the Creative Commons 3.0 BY SA (aka CC 3.0 BY SA).
 # This license can be found at http://creativecommons.org/licenses/by-sa/3.0/
 
+import re
 import datetime
 import struct
 
@@ -49,10 +50,13 @@ def _packheader(fieldspecs, numrows=None, records=None):
 
     return struct.pack('<BBBBLHH20x', ver, year, mon, day, numrows, lenheader, lenrecord)
 
-def _setvalue(value, typ, size, nulls=None):
+def _setvalue(value, typ, size, nulls=None, strip=None):
     '''Set a field's value'''
     if nulls and value in nulls:
         value = ''
+
+    if strip:
+        value = strip.sub('', value)
 
     if typ == "N":
         value = str(value).rjust(size, ' ')
@@ -71,7 +75,7 @@ def _setvalue(value, typ, size, nulls=None):
 
     return value
 
-def dbfwriter(handle, fields, records, numrows=None, nulls=None):
+def dbfwriter(handle, fields, records, numrows=None, **kwargs):
     """ Return a string suitable for writing directly to a binary dbf file.
 
     File f should be open for writing in a binary mode.
@@ -86,11 +90,17 @@ def dbfwriter(handle, fields, records, numrows=None, nulls=None):
 
     Fields with empty fieldspec dictionaries will be ignored.
 
+    records: an iterable over the records (sequences of field values).
     nulls: values to treat as NULLs
-
-    Records can be an iterable over the records (sequences of field values).
+    strip: A regex to apply to each field and substitute with blank.
     """
-    nulls = set(nulls) or []
+    nulls = set(kwargs.get('nulls', []))
+
+    if kwargs.get('strip'):
+        regex = re.compile(kwargs['strip'])
+    else:
+        regex = None
+
     handle.write(_packheader(fields.values(), numrows=numrows, records=records))
 
     # field specs
@@ -107,10 +117,9 @@ def dbfwriter(handle, fields, records, numrows=None, nulls=None):
         handle.write(' ') # deletion flag
         for fspec, value in zip(fields.values(), row):
             if fspec:
-                value = _setvalue(value, fspec['type'], fspec['size'], nulls=nulls)
+                value = _setvalue(value, fspec['type'], fspec['size'], nulls=nulls, strip=regex)
                 assert len(value) == fspec['size']
                 handle.write(value)
 
     # End of file
     handle.write('\x1A')
-
